@@ -1,0 +1,1583 @@
+annotations: []
+smart_annotations: []
+nodes:
+  - boot_disk_size: null
+    configuration:
+      - name: first-boot.cfg
+        content: |-
+          !
+          hostname PE1
+          username cisco
+           group root-lr
+           group cisco-support
+           secret 0 CHANGE-ME
+          !
+          cdp
+          vrf RED
+           address-family ipv4 unicast
+            import route-target
+             65000:200
+            !
+            export route-target
+             65000:200
+            !
+           !
+           address-family ipv6 unicast
+            import route-target
+             65000:200
+            !
+            export route-target
+             65000:200
+            !
+           !
+          !
+          vrf BLUE
+           address-family ipv4 unicast
+            import route-target
+             65000:100
+            !
+            export route-target
+             65000:100
+            !
+           !
+           address-family ipv6 unicast
+            import route-target
+             65000:100
+            !
+            export route-target
+             65000:100
+            !
+           !
+          !
+          interface Loopback0
+           description router-id and SRv6 encapsulation source
+           ipv6 address 2001:db8:100::1/128
+          !
+          interface Loopback101
+           description BLUE tenant endpoint
+           vrf BLUE
+           ipv4 address 10.100.1.1 255.255.255.255
+           ipv6 address 2001:db8:a:101::1/128
+          !
+          interface Loopback201
+           description RED tenant endpoint
+           vrf RED
+           ipv4 address 10.200.1.1 255.255.255.255
+           ipv6 address 2001:db8:a:201::1/128
+          !
+          interface MgmtEth0/RP0/CPU0/0
+           shutdown
+          !
+          interface GigabitEthernet0/0/0/0
+           description TO-P2 cost 10
+           cdp
+           ipv6 address 2001:db8:200:12::/127
+          !
+          interface GigabitEthernet0/0/0/1
+           description TO-P3 cost 40
+           cdp
+           ipv6 address 2001:db8:200:13::/127
+          !
+          interface GigabitEthernet0/0/0/2
+           description TO-CE BLUE
+           vrf BLUE
+           ipv4 address 10.1.1.1 255.255.255.0
+           ipv6 address 2001:db8:c:101::1/64
+           no shutdown
+          !
+          interface GigabitEthernet0/0/0/3
+           description TO-CE RED
+           vrf RED
+           ipv4 address 10.2.1.1 255.255.255.0
+           ipv6 address 2001:db8:c:201::1/64
+           no shutdown
+          !
+          interface GigabitEthernet0/0/0/4
+           description TO-CE L2 attachment circuit
+           no shutdown
+          !
+          router isis CORE
+           is-type level-2-only
+           net 49.0001.0000.0000.0001.00
+           log adjacency changes
+           address-family ipv6 unicast
+            metric-style wide
+            fast-reroute per-prefix tiebreaker node-protecting index 100
+            microloop avoidance segment-routing
+            segment-routing srv6
+             locator MAIN
+             !
+             locator FA128
+             !
+            !
+           !
+           flex-algo 128
+            priority 200
+            metric-type delay
+            advertise-definition
+           !
+           interface Loopback0
+            passive
+            address-family ipv6 unicast
+            !
+           !
+           interface GigabitEthernet0/0/0/0
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 40
+            !
+           !
+          !
+          router bgp 65000
+           bgp router-id 10.0.0.1
+           address-family vpnv4 unicast
+           !
+           address-family vpnv6 unicast
+           !
+           neighbor 2001:db8:100::6
+            remote-as 65000
+            update-source Loopback0
+            address-family vpnv4 unicast
+            !
+            address-family vpnv6 unicast
+            !
+           !
+           vrf RED
+            rd 65000:201
+            address-family ipv4 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+            address-family ipv6 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+           !
+           vrf BLUE
+            rd 65000:101
+            address-family ipv4 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+            address-family ipv6 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+           !
+          !
+          segment-routing
+           traffic-eng
+            segment-lists
+             srv6
+              sid-format usid-f3216
+             !
+             segment-list TWO-BLOCKS
+              srv6
+               index 10 sid fcbb:bb01:3::
+               index 20 sid fcbb:bb01:5::
+               index 30 sid fcbb:bb00:6::
+              !
+             !
+             segment-list VIA-P3-P5-UN
+              srv6
+               index 10 sid fcbb:bb00:3::
+               index 20 sid fcbb:bb00:5::
+               index 30 sid fcbb:bb00:6::
+              !
+             !
+            !
+            on-demand color 200
+             srv6
+              binding-sid dynamic behavior ub6-insert-reduced locator FA128
+             !
+             dynamic
+              pcep
+              !
+              metric
+               type latency
+              !
+             !
+            !
+            policy BLUE-C100
+             srv6
+              binding-sid dynamic behavior ub6-insert-reduced locator MAIN
+             !
+             color 100 end-point ipv6 2001:db8:100::6
+             candidate-paths
+              preference 100
+               explicit segment-list VIA-P3-P5-UN
+               !
+              !
+             !
+            !
+            policy BLUE6-C300
+             srv6
+              binding-sid dynamic behavior ub6-insert-reduced locator MAIN
+             !
+             color 300 end-point ipv6 2001:db8:100::6
+             candidate-paths
+              preference 100
+               explicit segment-list TWO-BLOCKS
+               !
+              !
+             !
+            !
+            pcc
+             source-address ipv6 2001:db8:100::1
+             pce address ipv6 2001:db8:100::4
+             !
+            !
+           !
+           srv6
+            encapsulation
+             source-address 2001:db8:100::1
+            !
+            locators
+             locator MAIN
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb00:1::/48
+             !
+             locator FA128
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb01:1::/48
+              algorithm 128
+             !
+            !
+           !
+          !
+          lldp
+          !
+          performance-measurement
+           interface GigabitEthernet0/0/0/0
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            delay-measurement
+             advertise-delay 1000
+            !
+           !
+          !
+          end
+      - name: xrd.env
+        content: |-
+          XR_VROUTER_DP_HUGEPAGE_MB=1024
+          XR_VROUTER_DP_MAIN_TUNE=100,250,500,80,100
+    cpu_limit: null
+    cpus: 2
+    data_volume: null
+    hide_links: false
+    id: n0
+    image_definition: xrd-vr-e1000-26-2-2
+    label: PE1
+    node_definition: xrd-vr-e1000
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: 7168
+    tags: []
+    x: -450
+    y: 0
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: MgmtEth0/RP0/CPU0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet0/0/0/0
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet0/0/0/1
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet0/0/0/2
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i5
+        label: GigabitEthernet0/0/0/3
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i6
+        label: GigabitEthernet0/0/0/4
+        mac_address: null
+        type: physical
+        slot: 5
+  - boot_disk_size: null
+    configuration:
+      - name: first-boot.cfg
+        content: |-
+          !
+          hostname P2
+          username cisco
+           group root-lr
+           group cisco-support
+           secret 0 CHANGE-ME
+          !
+          cdp
+          interface Loopback0
+           description router-id and SRv6 encapsulation source
+           ipv6 address 2001:db8:100::2/128
+          !
+          interface MgmtEth0/RP0/CPU0/0
+           shutdown
+          !
+          interface GigabitEthernet0/0/0/0
+           description TO-PE1 cost 10
+           cdp
+           ipv6 address 2001:db8:200:12::1/127
+          !
+          interface GigabitEthernet0/0/0/1
+           description TO-P4 cost 10
+           cdp
+           ipv6 address 2001:db8:200:24::/127
+          !
+          interface GigabitEthernet0/0/0/2
+           description TO-P3 cost 10
+           cdp
+           ipv6 address 2001:db8:200:23::/127
+          !
+          router isis CORE
+           is-type level-2-only
+           net 49.0001.0000.0000.0002.00
+           log adjacency changes
+           address-family ipv6 unicast
+            metric-style wide
+            fast-reroute per-prefix tiebreaker node-protecting index 100
+            microloop avoidance segment-routing
+            segment-routing srv6
+             locator MAIN
+             !
+             locator FA128
+             !
+            !
+           !
+           flex-algo 128
+            metric-type delay
+           !
+           interface Loopback0
+            passive
+            address-family ipv6 unicast
+            !
+           !
+           interface GigabitEthernet0/0/0/0
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+          !
+          segment-routing
+           srv6
+            encapsulation
+             source-address 2001:db8:100::2
+            !
+            locators
+             locator MAIN
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb00:2::/48
+             !
+             locator FA128
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb01:2::/48
+              algorithm 128
+             !
+            !
+           !
+          !
+          lldp
+          !
+          performance-measurement
+           interface GigabitEthernet0/0/0/0
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+          !
+          end
+      - name: xrd.env
+        content: |-
+          XR_VROUTER_DP_HUGEPAGE_MB=1024
+          XR_VROUTER_DP_MAIN_TUNE=100,250,500,80,100
+    cpu_limit: null
+    cpus: 2
+    data_volume: null
+    hide_links: false
+    id: n1
+    image_definition: xrd-vr-e1000-26-2-2
+    label: P2
+    node_definition: xrd-vr-e1000
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: 7168
+    tags: []
+    x: -150
+    y: -150
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: MgmtEth0/RP0/CPU0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet0/0/0/0
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet0/0/0/1
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet0/0/0/2
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: first-boot.cfg
+        content: |-
+          !
+          hostname P3
+          username cisco
+           group root-lr
+           group cisco-support
+           secret 0 CHANGE-ME
+          !
+          cdp
+          interface Loopback0
+           description router-id and SRv6 encapsulation source
+           ipv6 address 2001:db8:100::3/128
+          !
+          interface MgmtEth0/RP0/CPU0/0
+           shutdown
+          !
+          interface GigabitEthernet0/0/0/0
+           description TO-PE1 cost 40
+           cdp
+           ipv6 address 2001:db8:200:13::1/127
+          !
+          interface GigabitEthernet0/0/0/1
+           description TO-P5 cost 40
+           cdp
+           ipv6 address 2001:db8:200:35::/127
+          !
+          interface GigabitEthernet0/0/0/2
+           description TO-P2 cost 10
+           cdp
+           ipv6 address 2001:db8:200:23::1/127
+          !
+          router isis CORE
+           is-type level-2-only
+           net 49.0001.0000.0000.0003.00
+           log adjacency changes
+           address-family ipv6 unicast
+            metric-style wide
+            fast-reroute per-prefix tiebreaker node-protecting index 100
+            microloop avoidance segment-routing
+            segment-routing srv6
+             locator MAIN
+             !
+             locator FA128
+             !
+            !
+           !
+           flex-algo 128
+            metric-type delay
+           !
+           interface Loopback0
+            passive
+            address-family ipv6 unicast
+            !
+           !
+           interface GigabitEthernet0/0/0/0
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 40
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 40
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+          !
+          segment-routing
+           srv6
+            encapsulation
+             source-address 2001:db8:100::3
+            !
+            locators
+             locator MAIN
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb00:3::/48
+             !
+             locator FA128
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb01:3::/48
+              algorithm 128
+             !
+            !
+           !
+          !
+          lldp
+          !
+          performance-measurement
+           interface GigabitEthernet0/0/0/0
+            delay-measurement
+             advertise-delay 1000
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            delay-measurement
+             advertise-delay 1000
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+          !
+          end
+      - name: xrd.env
+        content: |-
+          XR_VROUTER_DP_HUGEPAGE_MB=1024
+          XR_VROUTER_DP_MAIN_TUNE=100,250,500,80,100
+    cpu_limit: null
+    cpus: 2
+    data_volume: null
+    hide_links: false
+    id: n2
+    image_definition: xrd-vr-e1000-26-2-2
+    label: P3
+    node_definition: xrd-vr-e1000
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: 7168
+    tags: []
+    x: -150
+    y: 150
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: MgmtEth0/RP0/CPU0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet0/0/0/0
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet0/0/0/1
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet0/0/0/2
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: first-boot.cfg
+        content: |-
+          !
+          hostname P4
+          username cisco
+           group root-lr
+           group cisco-support
+           secret 0 CHANGE-ME
+          !
+          cdp
+          interface Loopback0
+           description router-id and SRv6 encapsulation source
+           ipv6 address 2001:db8:100::4/128
+          !
+          interface MgmtEth0/RP0/CPU0/0
+           shutdown
+          !
+          interface GigabitEthernet0/0/0/0
+           description TO-P2 cost 10
+           cdp
+           ipv6 address 2001:db8:200:24::1/127
+          !
+          interface GigabitEthernet0/0/0/1
+           description TO-PE6 cost 10
+           cdp
+           ipv6 address 2001:db8:200:46::/127
+          !
+          interface GigabitEthernet0/0/0/2
+           description TO-P5 cost 10
+           cdp
+           ipv6 address 2001:db8:200:45::/127
+          !
+          router isis CORE
+           is-type level-2-only
+           net 49.0001.0000.0000.0004.00
+           distribute link-state
+           log adjacency changes
+           address-family ipv6 unicast
+            metric-style wide
+            fast-reroute per-prefix tiebreaker node-protecting index 100
+            microloop avoidance segment-routing
+            segment-routing srv6
+             locator MAIN
+             !
+             locator FA128
+             !
+            !
+           !
+           flex-algo 128
+            metric-type delay
+           !
+           interface Loopback0
+            passive
+            address-family ipv6 unicast
+            !
+           !
+           interface GigabitEthernet0/0/0/0
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+          !
+          segment-routing
+           srv6
+            encapsulation
+             source-address 2001:db8:100::4
+            !
+            locators
+             locator MAIN
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb00:4::/48
+             !
+             locator FA128
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb01:4::/48
+              algorithm 128
+             !
+            !
+           !
+          !
+          pce
+           address ipv6 2001:db8:100::4
+          !
+          lldp
+          !
+          performance-measurement
+           interface GigabitEthernet0/0/0/0
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+          !
+          end
+      - name: xrd.env
+        content: |-
+          XR_VROUTER_DP_HUGEPAGE_MB=1024
+          XR_VROUTER_DP_MAIN_TUNE=100,250,500,80,100
+    cpu_limit: null
+    cpus: 2
+    data_volume: null
+    hide_links: false
+    id: n3
+    image_definition: xrd-vr-e1000-26-2-2
+    label: P4
+    node_definition: xrd-vr-e1000
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: 7168
+    tags: []
+    x: 150
+    y: -150
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: MgmtEth0/RP0/CPU0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet0/0/0/0
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet0/0/0/1
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet0/0/0/2
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: first-boot.cfg
+        content: |-
+          !
+          hostname P5
+          username cisco
+           group root-lr
+           group cisco-support
+           secret 0 CHANGE-ME
+          !
+          cdp
+          interface Loopback0
+           description router-id and SRv6 encapsulation source
+           ipv6 address 2001:db8:100::5/128
+          !
+          interface MgmtEth0/RP0/CPU0/0
+           shutdown
+          !
+          interface GigabitEthernet0/0/0/0
+           description TO-P3 cost 40
+           cdp
+           ipv6 address 2001:db8:200:35::1/127
+          !
+          interface GigabitEthernet0/0/0/1
+           description TO-PE6 cost 40
+           cdp
+           ipv6 address 2001:db8:200:56::/127
+          !
+          interface GigabitEthernet0/0/0/2
+           description TO-P4 cost 10
+           cdp
+           ipv6 address 2001:db8:200:45::1/127
+          !
+          router isis CORE
+           is-type level-2-only
+           net 49.0001.0000.0000.0005.00
+           log adjacency changes
+           address-family ipv6 unicast
+            metric-style wide
+            fast-reroute per-prefix tiebreaker node-protecting index 100
+            microloop avoidance segment-routing
+            segment-routing srv6
+             locator MAIN
+             !
+             locator FA128
+             !
+            !
+           !
+           flex-algo 128
+            metric-type delay
+           !
+           interface Loopback0
+            passive
+            address-family ipv6 unicast
+            !
+           !
+           interface GigabitEthernet0/0/0/0
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 40
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 40
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+          !
+          segment-routing
+           srv6
+            encapsulation
+             source-address 2001:db8:100::5
+            !
+            locators
+             locator MAIN
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb00:5::/48
+             !
+             locator FA128
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb01:5::/48
+              algorithm 128
+             !
+            !
+           !
+          !
+          lldp
+          !
+          performance-measurement
+           interface GigabitEthernet0/0/0/0
+            delay-measurement
+             advertise-delay 1000
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            delay-measurement
+             advertise-delay 1000
+            !
+           !
+           interface GigabitEthernet0/0/0/2
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+          !
+          end
+      - name: xrd.env
+        content: |-
+          XR_VROUTER_DP_HUGEPAGE_MB=1024
+          XR_VROUTER_DP_MAIN_TUNE=100,250,500,80,100
+    cpu_limit: null
+    cpus: 2
+    data_volume: null
+    hide_links: false
+    id: n4
+    image_definition: xrd-vr-e1000-26-2-2
+    label: P5
+    node_definition: xrd-vr-e1000
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: 7168
+    tags: []
+    x: 150
+    y: 150
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: MgmtEth0/RP0/CPU0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet0/0/0/0
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet0/0/0/1
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet0/0/0/2
+        mac_address: null
+        type: physical
+        slot: 3
+  - boot_disk_size: null
+    configuration:
+      - name: first-boot.cfg
+        content: |-
+          !
+          hostname PE6
+          username cisco
+           group root-lr
+           group cisco-support
+           secret 0 CHANGE-ME
+          !
+          cdp
+          vrf RED
+           address-family ipv4 unicast
+            import route-target
+             65000:200
+            !
+            export route-policy RED-EXPORT-C200
+            export route-target
+             65000:200
+            !
+           !
+           address-family ipv6 unicast
+            import route-target
+             65000:200
+            !
+            export route-target
+             65000:200
+            !
+           !
+          !
+          vrf BLUE
+           address-family ipv4 unicast
+            import route-target
+             65000:100
+            !
+            export route-policy BLUE-EXPORT-C100
+            export route-target
+             65000:100
+            !
+           !
+           address-family ipv6 unicast
+            import route-target
+             65000:100
+            !
+            export route-policy BLUE6-EXPORT-C300
+            export route-target
+             65000:100
+            !
+           !
+          !
+          interface Loopback0
+           description router-id and SRv6 encapsulation source
+           ipv6 address 2001:db8:100::6/128
+          !
+          interface Loopback101
+           description BLUE tenant endpoint
+           vrf BLUE
+           ipv4 address 10.100.6.6 255.255.255.255
+           ipv6 address 2001:db8:a:106::6/128
+          !
+          interface Loopback201
+           description RED tenant endpoint
+           vrf RED
+           ipv4 address 10.200.6.6 255.255.255.255
+           ipv6 address 2001:db8:a:206::6/128
+          !
+          interface MgmtEth0/RP0/CPU0/0
+           shutdown
+          !
+          interface GigabitEthernet0/0/0/0
+           description TO-P4 cost 10
+           cdp
+           ipv6 address 2001:db8:200:46::1/127
+          !
+          interface GigabitEthernet0/0/0/1
+           description TO-P5 cost 40
+           cdp
+           ipv6 address 2001:db8:200:56::1/127
+          !
+          interface GigabitEthernet0/0/0/2
+           description TO-CE BLUE
+           vrf BLUE
+           ipv4 address 10.1.6.1 255.255.255.0
+           ipv6 address 2001:db8:c:106::1/64
+           no shutdown
+          !
+          interface GigabitEthernet0/0/0/3
+           description TO-CE RED
+           vrf RED
+           ipv4 address 10.2.6.1 255.255.255.0
+           ipv6 address 2001:db8:c:206::1/64
+           no shutdown
+          !
+          interface GigabitEthernet0/0/0/4
+           description TO-CE L2 attachment circuit
+           no shutdown
+          !
+          extcommunity-set opaque COLOR-100
+            100
+          end-set
+          !
+          extcommunity-set opaque COLOR-200
+            200
+          end-set
+          !
+          extcommunity-set opaque COLOR-300
+            300
+          end-set
+          !
+          route-policy RED-EXPORT-C200
+            set extcommunity color COLOR-200
+          end-policy
+          !
+          route-policy BLUE-EXPORT-C100
+            set extcommunity color COLOR-100
+          end-policy
+          !
+          route-policy BLUE6-EXPORT-C300
+            set extcommunity color COLOR-300
+          end-policy
+          !
+          router isis CORE
+           is-type level-2-only
+           net 49.0001.0000.0000.0006.00
+           log adjacency changes
+           address-family ipv6 unicast
+            metric-style wide
+            fast-reroute per-prefix tiebreaker node-protecting index 100
+            microloop avoidance segment-routing
+            segment-routing srv6
+             locator MAIN
+             !
+             locator FA128
+             !
+            !
+           !
+           flex-algo 128
+            priority 100
+            metric-type delay
+            advertise-definition
+           !
+           interface Loopback0
+            passive
+            address-family ipv6 unicast
+            !
+           !
+           interface GigabitEthernet0/0/0/0
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 10
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            bfd minimum-interval 100
+            bfd multiplier 3
+            bfd fast-detect ipv6
+            point-to-point
+            address-family ipv6 unicast
+             fast-reroute per-prefix
+             fast-reroute per-prefix ti-lfa
+             metric 40
+            !
+           !
+          !
+          router bgp 65000
+           bgp router-id 10.0.0.6
+           address-family vpnv4 unicast
+           !
+           address-family vpnv6 unicast
+           !
+           neighbor 2001:db8:100::1
+            remote-as 65000
+            update-source Loopback0
+            address-family vpnv4 unicast
+            !
+            address-family vpnv6 unicast
+            !
+           !
+           vrf RED
+            rd 65000:206
+            address-family ipv4 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+            address-family ipv6 unicast
+             segment-routing srv6
+              locator FA128
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+           !
+           vrf BLUE
+            rd 65000:106
+            address-family ipv4 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+            address-family ipv6 unicast
+             segment-routing srv6
+              locator MAIN
+              alloc mode per-vrf
+             !
+             redistribute connected
+            !
+           !
+          !
+          segment-routing
+           srv6
+            encapsulation
+             source-address 2001:db8:100::6
+            !
+            locators
+             locator MAIN
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb00:6::/48
+             !
+             locator FA128
+              micro-segment behavior unode psp-usd
+              prefix fcbb:bb01:6::/48
+              algorithm 128
+             !
+            !
+           !
+          !
+          lldp
+          !
+          performance-measurement
+           interface GigabitEthernet0/0/0/0
+            delay-measurement
+             advertise-delay 5000
+            !
+           !
+           interface GigabitEthernet0/0/0/1
+            delay-measurement
+             advertise-delay 1000
+            !
+           !
+          !
+          end
+      - name: xrd.env
+        content: |-
+          XR_VROUTER_DP_HUGEPAGE_MB=1024
+          XR_VROUTER_DP_MAIN_TUNE=100,250,500,80,100
+    cpu_limit: null
+    cpus: 2
+    data_volume: null
+    hide_links: false
+    id: n5
+    image_definition: xrd-vr-e1000-26-2-2
+    label: PE6
+    node_definition: xrd-vr-e1000
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: 7168
+    tags: []
+    x: 450
+    y: 0
+    interfaces:
+      - id: i0
+        label: Loopback0
+        mac_address: null
+        type: loopback
+      - id: i1
+        label: MgmtEth0/RP0/CPU0/0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i2
+        label: GigabitEthernet0/0/0/0
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i3
+        label: GigabitEthernet0/0/0/1
+        mac_address: null
+        type: physical
+        slot: 2
+      - id: i4
+        label: GigabitEthernet0/0/0/2
+        mac_address: null
+        type: physical
+        slot: 3
+      - id: i5
+        label: GigabitEthernet0/0/0/3
+        mac_address: null
+        type: physical
+        slot: 4
+      - id: i6
+        label: GigabitEthernet0/0/0/4
+        mac_address: null
+        type: physical
+        slot: 5
+  - boot_disk_size: null
+    configuration:
+      - name: node.cfg
+        content: |-
+          hostname CE-A
+          # eth0 = BLUE, eth1 = RED, eth2 = L2 services. Source-based routing keeps the tenants apart.
+          ip link set eth0 up
+          ip link set eth1 up
+          ip link set eth2 up
+          ip addr add 10.1.1.2/24 dev eth0
+          ip addr add 10.2.1.2/24 dev eth1
+          ip -6 addr add 2001:db8:c:101::2/64 dev eth0
+          ip -6 addr add 2001:db8:c:201::2/64 dev eth1
+          ip route add default via 10.1.1.1 table 101
+          ip route add default via 10.2.1.1 table 201
+          ip rule add from 10.1.1.2 table 101
+          ip rule add from 10.2.1.2 table 201
+          ip -6 route add 2001:db8:c:106::/64 via 2001:db8:c:101::1
+          ip -6 route add 2001:db8:c:206::/64 via 2001:db8:c:201::1
+          ip -6 route add 2001:db8:a:106::/64 via 2001:db8:c:101::1
+          ip -6 route add 2001:db8:a:206::/64 via 2001:db8:c:201::1
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n6
+    image_definition: null
+    label: CE-A
+    node_definition: alpine
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: -700
+    y: 0
+    interfaces:
+      - id: i0
+        label: eth0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: eth1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i2
+        label: eth2
+        mac_address: null
+        type: physical
+        slot: 2
+  - boot_disk_size: null
+    configuration:
+      - name: node.cfg
+        content: |-
+          hostname CE-B
+          # eth0 = BLUE, eth1 = RED, eth2 = L2 services. Source-based routing keeps the tenants apart.
+          ip link set eth0 up
+          ip link set eth1 up
+          ip link set eth2 up
+          ip addr add 10.1.6.2/24 dev eth0
+          ip addr add 10.2.6.2/24 dev eth1
+          ip -6 addr add 2001:db8:c:106::2/64 dev eth0
+          ip -6 addr add 2001:db8:c:206::2/64 dev eth1
+          ip route add default via 10.1.6.1 table 101
+          ip route add default via 10.2.6.1 table 201
+          ip rule add from 10.1.6.2 table 101
+          ip rule add from 10.2.6.2 table 201
+          ip -6 route add 2001:db8:c:101::/64 via 2001:db8:c:106::1
+          ip -6 route add 2001:db8:c:201::/64 via 2001:db8:c:206::1
+          ip -6 route add 2001:db8:a:101::/64 via 2001:db8:c:106::1
+          ip -6 route add 2001:db8:a:201::/64 via 2001:db8:c:206::1
+    cpu_limit: null
+    cpus: null
+    data_volume: null
+    hide_links: false
+    id: n7
+    image_definition: null
+    label: CE-B
+    node_definition: alpine
+    parameters: {}
+    priority: null
+    pyats:
+      username: null
+      password: null
+      enable_password: null
+    ram: null
+    tags: []
+    x: 700
+    y: 0
+    interfaces:
+      - id: i0
+        label: eth0
+        mac_address: null
+        type: physical
+        slot: 0
+      - id: i1
+        label: eth1
+        mac_address: null
+        type: physical
+        slot: 1
+      - id: i2
+        label: eth2
+        mac_address: null
+        type: physical
+        slot: 2
+links:
+  - id: l0
+    n1: n0
+    n2: n1
+    i1: i2
+    i2: i2
+    conditioning: {}
+    label: PE1-GigabitEthernet0/0/0/0<->P2-GigabitEthernet0/0/0/0
+  - id: l1
+    n1: n1
+    n2: n3
+    i1: i3
+    i2: i2
+    conditioning: {}
+    label: P2-GigabitEthernet0/0/0/1<->P4-GigabitEthernet0/0/0/0
+  - id: l2
+    n1: n3
+    n2: n5
+    i1: i3
+    i2: i2
+    conditioning: {}
+    label: P4-GigabitEthernet0/0/0/1<->PE6-GigabitEthernet0/0/0/0
+  - id: l3
+    n1: n0
+    n2: n2
+    i1: i3
+    i2: i2
+    conditioning: {}
+    label: PE1-GigabitEthernet0/0/0/1<->P3-GigabitEthernet0/0/0/0
+  - id: l4
+    n1: n2
+    n2: n4
+    i1: i3
+    i2: i2
+    conditioning: {}
+    label: P3-GigabitEthernet0/0/0/1<->P5-GigabitEthernet0/0/0/0
+  - id: l5
+    n1: n4
+    n2: n5
+    i1: i3
+    i2: i3
+    conditioning: {}
+    label: P5-GigabitEthernet0/0/0/1<->PE6-GigabitEthernet0/0/0/1
+  - id: l6
+    n1: n1
+    n2: n2
+    i1: i4
+    i2: i4
+    conditioning: {}
+    label: P2-GigabitEthernet0/0/0/2<->P3-GigabitEthernet0/0/0/2
+  - id: l7
+    n1: n3
+    n2: n4
+    i1: i4
+    i2: i4
+    conditioning: {}
+    label: P4-GigabitEthernet0/0/0/2<->P5-GigabitEthernet0/0/0/2
+  - id: l8
+    n1: n0
+    n2: n6
+    i1: i4
+    i2: i0
+    conditioning: {}
+    label: PE1-GigabitEthernet0/0/0/2<->CE-A-eth0
+  - id: l9
+    n1: n0
+    n2: n6
+    i1: i5
+    i2: i1
+    conditioning: {}
+    label: PE1-GigabitEthernet0/0/0/3<->CE-A-eth1
+  - id: l10
+    n1: n0
+    n2: n6
+    i1: i6
+    i2: i2
+    conditioning: {}
+    label: PE1-GigabitEthernet0/0/0/4<->CE-A-eth2
+  - id: l11
+    n1: n5
+    n2: n7
+    i1: i4
+    i2: i0
+    conditioning: {}
+    label: PE6-GigabitEthernet0/0/0/2<->CE-B-eth0
+  - id: l12
+    n1: n5
+    n2: n7
+    i1: i5
+    i2: i1
+    conditioning: {}
+    label: PE6-GigabitEthernet0/0/0/3<->CE-B-eth1
+  - id: l13
+    n1: n5
+    n2: n7
+    i1: i6
+    i2: i2
+    conditioning: {}
+    label: PE6-GigabitEthernet0/0/0/4<->CE-B-eth2
+lab:
+  description: SRv6 uSID lab, 6 x XRd vRouter 26.2.2 + 2 x Alpine CE. L3VPN,
+    TI-LFA, Flex-Algo 128, SR Policy, PCE on P4.
+  notes: CE eth0 BLUE, eth1 RED, eth2 L2. PE Gi0/0/0/2 BLUE, /3 RED, /4 L2.
+  title: srv6-lab-v3
+  node_staging:
+    enabled: false
+    start_remaining: true
+    abort_on_failure: false
+  version: 0.3.1
